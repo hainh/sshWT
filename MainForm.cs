@@ -19,6 +19,8 @@ namespace sshWT
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         readonly KeyboardHook hook;
+        readonly string defaultEnvironmentCommand;
+        const string configFile = "app-config.json";
 
         public MainForm()
         {
@@ -39,6 +41,50 @@ namespace sshWT
             {
                 RegisterKey();
             }
+
+            try
+            {
+                var text = File.ReadAllBytes(configFile);
+                var json = System.Text.Json.JsonDocument.Parse(text);
+                var command = json.RootElement.GetProperty("defaultEnvironmentCommand").GetString();
+                if (string.IsNullOrWhiteSpace(command))
+                {
+                    throw new Exception();
+                }
+                defaultEnvironmentCommand = command + ' ';
+            }
+            catch (Exception)
+            {
+                defaultEnvironmentCommand = GetDefaultCommand();
+                var data = "{\"defaultEnvironmentCommand\": \"__wsl__\"}"
+                    .Replace("__wsl__", defaultEnvironmentCommand!.TrimEnd());
+                File.WriteAllBytes(configFile, System.Text.Encoding.UTF8.GetBytes(data));
+            }
+        }
+
+        private static string GetDefaultCommand()
+        {
+            var proc = Process.Start(new ProcessStartInfo()
+            {
+                StandardOutputEncoding = System.Text.Encoding.ASCII,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true,
+                FileName = "wsl",
+                Arguments = "-l --all"
+            });
+            if (proc == null)
+            {
+                throw new Exception("No wsl found");
+            }
+            var output = proc.StandardOutput.ReadToEnd().Replace("\0", "").Split('\n');
+            foreach (var line in output)
+            {
+                if (line.IndexOf("(Default)") >= 0)
+                {
+                    return "wsl -d " + line.Replace("(Default)", "").Trim() + ' ';
+                }
+            }
+            return "wsl ";
         }
 
         private void RegisterKey()
@@ -103,14 +149,14 @@ namespace sshWT
                 File.WriteAllText(fileName, string.Empty);
             }
             var allConnections = File.ReadAllLines(fileName).Where(line => !string.IsNullOrWhiteSpace(line)).ToArray();
-            if (allConnections.Length == 0)
+            if (allConnections.Length == 0 && entries.Count == 0)
             {
                 return;
             }
 
-            var allCurrentConnections = entries.Select(entry => entry.GetCommand()).ToArray();
-            if (allConnections.Length == allCurrentConnections.Length)
+            if (allConnections.Length == entries.Count)
             {
+                var allCurrentConnections = entries.Select(entry => entry.GetCommand()).ToArray();
                 var allEqual = true;
                 for (int i = 0; i < allConnections.Length; i++)
                 {
@@ -353,19 +399,24 @@ namespace sshWT
                     WindowType.SplitHorizontallyCurrentTab => "sp ",
                     _ => "",
                 };
+
                 var command = label.Text.Split(new char[] { '`', '~' }, 2).Last();
                 if (command.StartsWith('-'))
+                {
+                    command = mainForm.defaultEnvironmentCommand + command[1..];
+                }
+                else if (command.StartsWith('='))
                 {
                     command = command[1..];
                 }
                 else
                 {
-                    command = "ssh " + command;
+                    command = mainForm.defaultEnvironmentCommand + "ssh " + command;
                 }
                 ProcessStartInfo processStart = new()
                 {
                     FileName = "wt", // Windows Terminal
-                    Arguments = window + "ubuntu2004.exe run " + command,
+                    Arguments = command,
                     CreateNoWindow = true,
                 };
                 Process.Start(processStart);

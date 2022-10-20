@@ -106,7 +106,7 @@ namespace sshWT
             running = true;
             Task.Run(async () =>
             {
-                bool isContinuos = false;
+                bool isContinuous = false;
                 while (running)
                 {
                     await Task.Delay(500);
@@ -117,22 +117,31 @@ namespace sshWT
                         if (pid != 0)
                         {
                             var process = Process.GetProcessById((int)pid);
-                            if (process == null || process.Id == Process.GetCurrentProcess().Id) continue;
+                            if (process == null || process.Id == Environment.ProcessId) continue;
                             if (process.ProcessName == "WindowsTerminal")
                             {
-                                if (!isContinuos)
+                                if (!isContinuous)
                                 {
                                     Invoke(() =>
                                     {
+                                        TopMost = true;
                                         Activate();
-                                        SetForegroundWindow(process.MainWindowHandle);
+                                        Task.Run(async () =>
+                                        {
+                                            await Task.Delay(15);
+                                            Invoke(() =>
+                                            {
+                                                TopMost = false;
+                                                SetForegroundWindow(process.MainWindowHandle);
+                                            });
+                                        });
                                     });
                                 }
-                                isContinuos = true;
+                                isContinuous = true;
                             }
                             else
                             {
-                                isContinuos = false;
+                                isContinuous = false;
                             }
                         }
                     }

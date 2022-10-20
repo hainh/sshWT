@@ -76,10 +76,13 @@ namespace sshWT
             {
                 throw new Exception("No wsl found");
             }
-            var output = proc.StandardOutput.ReadToEnd().Replace("\0", "").Split('\n');
+            var output = proc.StandardOutput
+                .ReadToEnd()
+                .Replace("\0", "")
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var line in output)
             {
-                if (line.IndexOf("(Default)") >= 0)
+                if (line.Contains("(Default)"))
                 {
                     return "wsl -d " + line.Replace("(Default)", "").Trim() + ' ';
                 }
@@ -416,7 +419,7 @@ namespace sshWT
                 ProcessStartInfo processStart = new()
                 {
                     FileName = "wt", // Windows Terminal
-                    Arguments = command,
+                    Arguments = window + command,
                     CreateNoWindow = true,
                 };
                 Process.Start(processStart);

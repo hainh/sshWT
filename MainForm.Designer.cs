@@ -39,6 +39,7 @@
             this.deleteBtn = new System.Windows.Forms.Button();
             this.container = new System.Windows.Forms.Panel();
             this.reloadBtn = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // label1
@@ -137,11 +138,20 @@
             this.reloadBtn.Text = "Reload";
             this.reloadBtn.Click += new System.EventHandler(this.ReloadBtn_Click);
             // 
+            // label2
+            // 
+            this.label2.BackColor = System.Drawing.Color.Gray;
+            this.label2.Location = new System.Drawing.Point(12, 90);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(520, 1);
+            this.label2.TabIndex = 11;
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(544, 834);
+            this.Controls.Add(this.label2);
             this.Controls.Add(this.reloadBtn);
             this.Controls.Add(this.container);
             this.Controls.Add(this.deleteBtn);
@@ -175,5 +185,6 @@
         private Panel container;
         private ToolTip toolTip1;
         private Label reloadBtn;
+        private Label label2;
     }
 }

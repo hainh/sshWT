@@ -1,5 +1,6 @@
 using sshWT.Animation;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace sshWT
@@ -20,6 +21,8 @@ namespace sshWT
 
         readonly KeyboardHook hook;
         readonly string defaultEnvironmentCommand;
+        private readonly bool floatOnOpenTerminal;
+        private int focusCount = 0;
         const string configFile = "app-config.json";
 
         public MainForm()
@@ -33,15 +36,7 @@ namespace sshWT
             container.Size = new Size(this.Width - 5, (ClientRectangle.Height - container.Location.Y) / deltaY * deltaY);
 
             LoadAll();
-            if (Screen.AllScreens.Length > 1)
-            {
-                CheckWindowsTerminalForegroundAndActivateThisWindow();
-            }
-            else
-            {
-                RegisterKey();
-            }
-
+            bool focusOnFloat;
             try
             {
                 var text = File.ReadAllBytes(configFile);
@@ -52,14 +47,30 @@ namespace sshWT
                     throw new Exception();
                 }
                 defaultEnvironmentCommand = command + ' ';
+                floatOnOpenTerminal = json.RootElement.GetProperty("floatOnOpenTerminal").GetBoolean();
+                focusOnFloat = json.RootElement.GetProperty("focusOnFloat").GetBoolean();
             }
             catch (Exception)
             {
                 defaultEnvironmentCommand = GetDefaultCommand();
-                var data = "{\"defaultEnvironmentCommand\": \"__wsl__\"}"
-                    .Replace("__wsl__", defaultEnvironmentCommand!.TrimEnd());
+                floatOnOpenTerminal = true;
+                focusOnFloat = true;
+                var data = "{\"defaultEnvironmentCommand\": \"__wsl__\", \"floatOnOpenTerminal\": \"__float__\", \"focusOnFloat\": \"__focus__\"}"
+                    .Replace("__wsl__", defaultEnvironmentCommand!.TrimEnd())
+                    .Replace("\"__float__\"", floatOnOpenTerminal.ToString().ToLower())
+                    .Replace("\"__focus__\"", focusOnFloat.ToString().ToLower());
                 File.WriteAllBytes(configFile, System.Text.Encoding.UTF8.GetBytes(data));
             }
+            if (Screen.AllScreens.Length > 1 && floatOnOpenTerminal)
+            {
+                if (focusOnFloat) focusCount = 3;
+                CheckWindowsTerminalForegroundAndActivateThisWindow();
+            }
+            else
+            {
+                RegisterKey();
+            }
+
         }
 
         private static string GetDefaultCommand()
@@ -109,30 +120,33 @@ namespace sshWT
                 bool isContinuous = false;
                 while (running)
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(200);
                     var foregroundWND = GetForegroundWindow();
                     if (foregroundWND != IntPtr.Zero)
                     {
                         var retCode = GetWindowThreadProcessId(foregroundWND, out var pid);
                         if (pid != 0)
                         {
-                            var process = Process.GetProcessById((int)pid);
-                            if (process == null || process.Id == Environment.ProcessId) continue;
-                            if (process.ProcessName == "WindowsTerminal")
+                            if (pid == Environment.ProcessId)
+                            {
+                                isContinuous = true;
+                                continue;
+                            }
+                            if (IsWindowsTerminalProc((int)pid, out var process))
                             {
                                 if (!isContinuous)
                                 {
                                     Invoke(() =>
                                     {
                                         TopMost = true;
-                                        Activate();
+                                        if (focusCount-- > 0) Activate();
                                         Task.Run(async () =>
                                         {
                                             await Task.Delay(15);
                                             Invoke(() =>
                                             {
-                                                TopMost = false;
                                                 SetForegroundWindow(process.MainWindowHandle);
+                                                TopMost = false;
                                             });
                                         });
                                     });
@@ -152,6 +166,18 @@ namespace sshWT
         private void Hook_KeyPressed(object? sender, KeyPressedEventArgs e)
         {
             Activate();
+        }
+
+        readonly Dictionary<int, Process> procs = new();
+
+        private bool IsWindowsTerminalProc(int pid,[NotNullWhen(true)] out Process? proc)
+        {
+            if (procs.TryGetValue(pid, out proc))
+            {
+                return proc.ProcessName == "WindowsTerminal";
+            }
+            procs.Add(pid, Process.GetProcessById(pid));
+            return false;
         }
 
         private void LoadAll()
